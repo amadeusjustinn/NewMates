@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 
 void main() {
   runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -29,12 +32,13 @@ class ScanButton extends StatefulWidget {
 }
 
 class _ScanButtonState extends State<ScanButton> {
-  List<DiscoveredDevice> devices = [];
-  final flutterReactiveBle = FlutterReactiveBle();
+  List<BluetoothDiscoveryResult> results = [];
+
+  StreamSubscription<BluetoothDiscoveryResult>? subscription;
+  final serial = FlutterBluetoothSerial.instance;
 
   void scanDevices() async {
     bool permissionStatus = false;
-    // await FlutterBluePlus.startScan(timeout: const Duration(seconds: 100));
     PermissionStatus permissionAdvertise =
         await Permission.bluetoothAdvertise.request();
     PermissionStatus permissionConnect =
@@ -46,24 +50,20 @@ class _ScanButtonState extends State<ScanButton> {
 
     if (permissionStatus) {
       print("Listening. Results below:\n");
-      flutterReactiveBle.scanForDevices(withServices: []).listen((result) {
-        // code for handling results
-        print("${result.name} found!\n");
+      subscription = serial.startDiscovery().listen((result) {
         setState(() {
-          devices.add(result);
+          print("${result.device.name} found! Rssi: ${result.rssi}\n");
+          final existingIdx = results.indexWhere(
+              (element) => element.device.address == result.device.address);
+          if (existingIdx > -1) {
+            results[existingIdx] = result;
+          } else {
+            results.add(result);
+          }
+          results.map((r) => {print(r.device.name)});
         });
-      }, onError: (e) {
-        print("Houston, we've got a problem.\n$e");
       });
     }
-    // FlutterBluePlus.scanResults.listen((results) {
-    //   for (ScanResult result in results) {
-    //     print(result);
-    //     setState(() {
-    //       devices.add(result);
-    //     });
-    //   }
-    // });
   }
 
   @override
@@ -77,11 +77,11 @@ class _ScanButtonState extends State<ScanButton> {
         ),
         ListView.builder(
           shrinkWrap: true,
-          itemCount: devices.length,
+          itemCount: results.length,
           itemBuilder: (context, index) {
             return ListTile(
-              title: Text(devices[index].name),
-              subtitle: Text(devices[index].id),
+              title: Text(results[index].device.name!),
+              subtitle: Text(results[index].rssi.toString()),
             );
           },
         ),
